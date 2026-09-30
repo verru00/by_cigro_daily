@@ -13,10 +13,18 @@ CIGRO_PASSWORD = os.environ.get("CIGRO_PASSWORD", "")
 # ── 대상 브랜드 ──────────────────────────────────────────────────
 # 기본값은 brand_config.py. 환경변수(쉼표 구분)가 있으면 그쪽이 우선한다.
 # 워크플로는 Variables 가 없으면 빈 문자열을 넘기므로 `or` 로 받는다.
-from .brand_config import BRAND as DEFAULT_BRAND
+from . import brand_config as _BC
 
-BRANDS = [b.strip() for b in (os.environ.get("CIGRO_BRANDS", "").strip() or DEFAULT_BRAND).split(",")
+DEFAULT_BRAND = _BC.BRAND
+_ORDER_DEFAULT = ",".join(getattr(_BC, "ORDER_BRANDS", []) or [DEFAULT_BRAND])
+BRANDS = [b.strip() for b in (os.environ.get("CIGRO_BRANDS", "").strip() or _ORDER_DEFAULT).split(",")
           if b.strip()]
+
+# 주문 중 제품명에 이 글자가 들어간 행만 저장 (비우면 전부). 환경변수로 덮어쓸 수 있다.
+_keyword_env = os.environ.get("ORDER_PRODUCT_KEYWORD")
+ORDER_PRODUCT_KEYWORD = (_keyword_env if _keyword_env is not None
+                         else getattr(_BC, "ORDER_PRODUCT_KEYWORD", "")).strip()
+ORDER_PRODUCT_HEADER = "제품명"   # G열
 
 
 def check_brand(value, label: str) -> None:

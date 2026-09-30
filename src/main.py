@@ -28,6 +28,21 @@ def read_table(path: Path) -> pd.DataFrame:
     return pd.read_excel(path, dtype=str, keep_default_na=False)
 
 
+def filter_product_keyword(df: pd.DataFrame, keyword: str) -> pd.DataFrame:
+    """제품명에 keyword 가 들어간 행만 남긴다 (위치 무관). keyword 가 비면 그대로 돌려준다.
+
+    제품명 열이 없으면 전부 저장되는 사고를 막기 위해 중단한다.
+    """
+    if not keyword:
+        return df
+    cols = {str(c).strip(): c for c in df.columns}
+    col = cols.get(C.ORDER_PRODUCT_HEADER)
+    if col is None:
+        raise SystemExit(f"엑셀에 '{C.ORDER_PRODUCT_HEADER}' 열이 없어 '{keyword}' 필터를 적용할 수 없습니다")
+    keep = df[col].astype(str).str.contains(keyword, regex=False)
+    return df[keep].reset_index(drop=True)
+
+
 def to_sheet_rows(df: pd.DataFrame, header: list) -> list[list]:
     """시트 헤더(A~N) 순서에 맞춰 행을 만든다.
 
@@ -90,6 +105,7 @@ def main() -> int:
     log(f"기간: {start} ~ {end}")
     log(f"대상 브랜드: {', '.join(C.BRANDS)}")
     log(f"DRY_RUN={C.DRY_RUN} / FILL_FORMULAS={C.FILL_FORMULAS}")
+    log(f"제품명 필터: {C.ORDER_PRODUCT_KEYWORD + ' 포함' if C.ORDER_PRODUCT_KEYWORD else '(없음 — 전부 저장)'}")
 
     files = asyncio.run(fetch_all(C.BRANDS, start, end, out_dir))
     failed = [b for b in C.BRANDS if b not in files]
@@ -100,12 +116,16 @@ def main() -> int:
     # ── 수집 데이터 취합 ─────────────────────────────────────────
     frames, counts = [], {}
     for brand, path in files.items():
-        df = read_table(path)
+        raw = read_table(path)
+        df = filter_product_keyword(raw, C.ORDER_PRODUCT_KEYWORD)
         counts[brand] = len(df)
         df.to_csv(out_dir / f"{brand}_{start}_{end}.csv",
                   index=False, encoding="utf-8-sig")
         frames.append(df)
-        log(f"[{brand}] {len(df):,}행 수집")
+        if C.ORDER_PRODUCT_KEYWORD:
+            log(f"[{brand}] {len(raw):,}행 수집 -> '{C.ORDER_PRODUCT_KEYWORD}' 포함 {len(df):,}행 저장")
+        else:
+            log(f"[{brand}] {len(df):,}행 수집")
 
     total_new = sum(counts.values())
     if total_new == 0:

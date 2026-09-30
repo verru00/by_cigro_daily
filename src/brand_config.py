@@ -10,4 +10,12 @@ GitHub Variables 의 CIGRO_BRANDS / CIGRO_AD_BRAND / CIGRO_PNL_BRAND 가 있으�
 비워 두면 cigro 가 '전체' 브랜드를 내려주므로 빈 값도 허용하지 않는다.
 """
 
-BRAND = "포즈업"     # 예: 코즈코즈
+BRAND = "캠프살롱"
+
+# 주문(매출) 수집 브랜드. 여러 개면 한 번에 받아 같은 탭에 쌓는다 (E열 브랜드로 구분).
+# 비워 두면 위 BRAND 하나만 받는다. 광고·손익은 BRAND 하나만 받는다.
+# 예: ORDER_BRANDS = ["캠프살롱", "수면공감", "포즈업"]
+ORDER_BRANDS = ["캠프살롱", "포즈업"]
+
+# 주문 중 제품명(G열)에 이 글자가 들어간 행만 저장한다 (위치 무관). 비우면 전부 저장.
+ORDER_PRODUCT_KEYWORD = "[공구]"
