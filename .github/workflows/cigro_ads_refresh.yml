@@ -1,0 +1,88 @@
+name: cigro_ads_daily_refresh
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "true 면 시트에 쓰지 않고 다운로드/열 확인만"
+        required: false
+        default: "false"
+      probe:
+        description: "true 면 다운로드 없이 화면 덤프만 (셀렉터 찾기용)"
+        required: false
+        default: "false"
+      force_write:
+        description: "true 면 행수 급감 가드를 무시하고 강제 반영"
+        required: false
+        default: "false"
+      start_date:
+        description: "수동 시작일 YYYY-MM-DD (비우면 자동: 전일)"
+        required: false
+        default: ""
+      end_date:
+        description: "수동 종료일 YYYY-MM-DD (비우면 자동: 전일)"
+        required: false
+        default: ""
+
+concurrency:
+  group: cigro-ads-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Run ads refresh
+        env:
+          CIGRO_EMAIL:                 ${{ secrets.CIGRO_EMAIL }}
+          CIGRO_PASSWORD:              ${{ secrets.CIGRO_PASSWORD }}
+          # 광고 전용 시트를 따로 쓰면 CIGRO_ADS_SHEET_ID 를 등록한다.
+          # 없으면 주문과 같은 시트(CIGRO_SHEET_ID)의 다른 탭에 쓴다.
+          CIGRO_ADS_SHEET_ID:          ${{ secrets.CIGRO_ADS_SHEET_ID }}
+          CIGRO_SHEET_ID:              ${{ secrets.CIGRO_SHEET_ID }}
+          ADS_SHEET_TAB:               ${{ vars.ADS_SHEET_TAB || '광고 RAW' }}
+          ADS_FILL_FORMULAS:           ${{ vars.ADS_FILL_FORMULAS || 'false' }}
+          # '광고 RAW' 에는 브랜드 열이 없다 = 단일 브랜드 전용 탭
+          CIGRO_AD_BRAND:              ${{ vars.CIGRO_AD_BRAND }}   # 비면 src/brand_config.py
+          ADS_GROUP_BY:                ${{ vars.ADS_GROUP_BY || 'campaign' }}
+          # 셀렉터/URL 덮어쓰기 (기본은 비움 = 확인된 URL 구조로 조립)
+          CIGRO_ADS_URL:               ${{ vars.CIGRO_ADS_URL }}
+          ADS_EXCEL_SELECTOR:          ${{ vars.ADS_EXCEL_SELECTOR }}
+          DRIVE_FOLDER_ID:             ${{ secrets.DRIVE_FOLDER_ID }}
+          DRIVE_KEEP_HISTORY:          ${{ vars.DRIVE_KEEP_HISTORY || 'false' }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_CHAT_WEBHOOK_URL:     ${{ secrets.GOOGLE_CHAT_WEBHOOK_URL }}
+          DRY_RUN:                     ${{ github.event.inputs.dry_run }}
+          ADS_PROBE:                   ${{ github.event.inputs.probe }}
+          FORCE_WRITE:                 ${{ github.event.inputs.force_write }}
+          START_DATE:                  ${{ github.event.inputs.start_date }}
+          END_DATE:                    ${{ github.event.inputs.end_date }}
+          HEADLESS:                    "true"
+        run: python -m src.ads_main
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cigro-ads-raw
+          path: |
+            out_ads/*.csv
+            out_ads/*.xlsx
+            out_ads/*.png
+            out_ads/*.txt
+          retention-days: 90
+          if-no-files-found: warn

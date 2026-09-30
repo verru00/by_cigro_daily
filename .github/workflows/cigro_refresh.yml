@@ -1,1 +1,79 @@
+name: cigro_daily_refresh
 
+on:
+  workflow_dispatch:
+    inputs:
+      brands:
+        description: "대상 브랜드 (쉼표 구분). 비우면 기본값 사용"
+        required: false
+        default: ""
+      dry_run:
+        description: "true 면 시트에 쓰지 않고 다운로드/검증만"
+        required: false
+        default: "false"
+      force_write:
+        description: "true 면 행수 급감 가드를 무시하고 강제 반영"
+        required: false
+        default: "false"
+      start_date:
+        description: "수동 시작일 YYYY-MM-DD (비우면 자동)"
+        required: false
+        default: ""
+      end_date:
+        description: "수동 종료일 YYYY-MM-DD (비우면 자동)"
+        required: false
+        default: ""
+
+concurrency:
+  group: cigro-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Run refresh
+        env:
+          CIGRO_EMAIL:                 ${{ secrets.CIGRO_EMAIL }}
+          CIGRO_PASSWORD:              ${{ secrets.CIGRO_PASSWORD }}
+          CIGRO_SHEET_ID:              ${{ secrets.CIGRO_SHEET_ID }}
+          SHEET_TAB:                   ${{ vars.SHEET_TAB || '씨그로 2개월_리프레시' }}
+          FILL_FORMULAS:               ${{ vars.FILL_FORMULAS || 'false' }}
+          PURCHASE_CLASSIFY:           ${{ vars.PURCHASE_CLASSIFY || 'true' }}
+          DRIVE_FOLDER_ID:             ${{ secrets.DRIVE_FOLDER_ID }}
+          DRIVE_KEEP_HISTORY:          ${{ vars.DRIVE_KEEP_HISTORY || 'false' }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_CHAT_WEBHOOK_URL:     ${{ secrets.GOOGLE_CHAT_WEBHOOK_URL }}
+          CIGRO_BRANDS:                ${{ github.event.inputs.brands || vars.CIGRO_BRANDS }}   # 비면 src/brand_config.py
+          DRY_RUN:                     ${{ github.event.inputs.dry_run }}
+          FORCE_WRITE:                 ${{ github.event.inputs.force_write }}
+          START_DATE:                  ${{ github.event.inputs.start_date }}
+          END_DATE:                    ${{ github.event.inputs.end_date }}
+          HEADLESS:                    "true"
+        run: python -m src.main
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cigro-order-raw
+          path: |
+            out/*.csv
+            out/*.xlsx
+            out/*.png
+          retention-days: 90
+          if-no-files-found: warn
