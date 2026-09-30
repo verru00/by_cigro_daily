@@ -60,24 +60,66 @@ def _pad(row, n: int) -> list:
     return (list(row) + [""] * n)[:n]
 
 
-def read_existing(ws) -> tuple[list, list]:
-    """A~N 영역을 청크로 나눠 읽어 (헤더, 데이터행) 반환."""
+def col_letter(idx: int) -> str:
+    """0-based 열 번호 -> 'A', 'W', 'AA' ..."""
+    s, n = "", idx + 1
+    while n:
+        n, r = divmod(n - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+# 브랜드 열을 새로 만들 때 쓰는 최소 위치. O~R(수동)·S~V(수식) 뒤 W열.
+BRAND_COL_MIN = 22
+
+
+def ensure_brand_col(ws, name: str) -> int:
+    """1행에서 브랜드 열을 찾고, 없으면 V열 뒤 첫 빈 칸에 헤더를 만든다. 0-based 위치 반환."""
+    row = retry(ws.row_values, 1) or []
+    for i, h in enumerate(row):
+        if str(h).strip() == name:
+            return i
+    idx = max(len(row), BRAND_COL_MIN)
+    if ws.col_count < idx + 1:
+        retry(ws.add_cols, idx + 1 - ws.col_count)
+    retry(ws.update, values=[[name]], range_name=f"{col_letter(idx)}1",
+          value_input_option="USER_ENTERED")
+    print(f"  '{name}' 열 생성: {col_letter(idx)}열", flush=True)
+    return idx
+
+
+def read_existing(ws, brand_col: int | None = None):
+    """A~N 영역을 청크로 나눠 읽어 (헤더, 데이터행) 반환.
+
+    brand_col 을 주면 그 열까지 읽어 (헤더, 데이터행, 브랜드목록) 을 반환한다.
+    브랜드목록은 데이터행과 같은 순서·길이다.
+    """
+    last = col_letter(brand_col) if brand_col is not None else "N"
+    width = (brand_col + 1) if brand_col is not None else DATA_COLS
     total = ws.row_count
     values = []
     start = 1
     while start <= total:
         end = min(start + READ_CHUNK - 1, total)
-        chunk = retry(ws.get, f"A{start}:N{end}") or []
+        chunk = retry(ws.get, f"A{start}:{last}{end}") or []
         values.extend(chunk)
         if len(chunk) < (end - start + 1):
             break
         start = end + 1
 
     if not values:
-        return [], []
+        return ([], [], []) if brand_col is not None else ([], [])
     header = _pad(values[0], DATA_COLS)
-    rows = [_pad(r, DATA_COLS) for r in values[1:]
-            if any(str(c).strip() for c in r)]
+    rows, brands = [], []
+    for r in values[1:]:
+        r = _pad(r, width)
+        if not any(str(c).strip() for c in r[:DATA_COLS]):
+            continue
+        rows.append(r[:DATA_COLS])
+        if brand_col is not None:
+            brands.append(str(r[brand_col]).strip())
+    if brand_col is not None:
+        return header, rows, brands
     return header, rows
 
 
@@ -126,6 +168,25 @@ def merge(existing: list, new_rows: list, days: list[str]) -> tuple[list, int]:
     return merged, len(kept)
 
 
+def merge_branded(existing: list, existing_brands: list, new_rows: list, new_brands: list,
+                  days: list[str], brands: list[str], legacy: str = "") -> tuple[list, list, int]:
+    """브랜드 × 날짜 기준 교체. 수집한 (날짜, 브랜드) 행만 걷어내고 나머지는 보존.
+
+    브랜드 칸이 빈 기존 행은 legacy 브랜드로 본다 (단일 브랜드 시절 데이터).
+    반환: (병합된 행, 병합된 브랜드, 보존된 행수)
+    """
+    target_days, target_brands = set(days), set(brands)
+    kept = []
+    for row, b in zip(existing, existing_brands):
+        b = b or legacy
+        if parse_date(row[COL_DATE]) in target_days and b in target_brands:
+            continue
+        kept.append((row, b))
+    items = kept + list(zip(new_rows, new_brands))
+    items.sort(key=lambda it: parse_date(it[0][COL_DATE]) or "9999-99-99")   # 안정 정렬
+    return [r for r, _ in items], [b for _, b in items], len(kept)
+
+
 def _first_diff(a: list, b: list) -> int:
     """두 행 목록이 처음으로 달라지는 위치. 앞부분이 같으면 그만큼 안 써도 된다."""
     n = min(len(a), len(b))
@@ -136,9 +197,12 @@ def _first_diff(a: list, b: list) -> int:
 
 
 def write(ws, header: list, rows: list, prev_count: int,
-          fill_formulas: bool = False, existing: list | None = None) -> int:
+          fill_formulas: bool = False, existing: list | None = None,
+          brand_col: int | None = None, brands: list | None = None,
+          existing_brands: list | None = None) -> int:
     """병합 결과를 A~N 에 기록. 변경되지 않은 앞부분은 건너뛴다.
 
+    brand_col·brands 를 주면 그 열에 브랜드를 함께 기록한다.
     반환: 실제로 기록한 행 수
     """
     n = len(rows)
@@ -150,7 +214,11 @@ def write(ws, header: list, rows: list, prev_count: int,
               value_input_option="USER_ENTERED")
 
     # 과거 데이터는 대개 그대로다. 달라지는 지점부터만 쓴다.
-    skip = _first_diff(existing, rows) if existing else 0
+    if brand_col is not None and brands is not None:
+        old = [list(r) + [b] for r, b in zip(existing or [], existing_brands or [])]
+        skip = _first_diff(old, [list(r) + [b] for r, b in zip(rows, brands)]) if existing else 0
+    else:
+        skip = _first_diff(existing, rows) if existing else 0
     if skip:
         print(f"  앞 {skip:,}행 동일 - 기록 생략", flush=True)
 
@@ -174,8 +242,18 @@ def write(ws, header: list, rows: list, prev_count: int,
             retry(ws.update, values=block, range_name=f"S{r1}:V{r1 + cnt - 1}",
                   value_input_option="USER_ENTERED")
 
-    # 행이 줄었으면 아래쪽 잔재 제거 (수식 열까지 함께)
+    # 브랜드 열
+    if brand_col is not None and brands is not None and skip < n:
+        L = col_letter(brand_col)
+        for i in range(skip, n, WRITE_CHUNK):
+            block = [[b] for b in brands[i:i + WRITE_CHUNK]]
+            r1 = i + 2
+            retry(ws.update, values=block, range_name=f"{L}{r1}:{L}{r1 + len(block) - 1}",
+                  value_input_option="USER_ENTERED")
+
+    # 행이 줄었으면 아래쪽 잔재 제거 (수식 열·브랜드 열까지 함께)
     if prev_count > n:
-        retry(ws.batch_clear, [f"A{n + 2}:V{prev_count + 1}"])
+        last = col_letter(max(brand_col or 0, 21))
+        retry(ws.batch_clear, [f"A{n + 2}:{last}{prev_count + 1}"])
 
     return written

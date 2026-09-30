@@ -13,9 +13,15 @@ GitHub Variables 의 CIGRO_BRANDS / CIGRO_AD_BRAND / CIGRO_PNL_BRAND 가 있으�
 BRAND = "캠프살롱"
 
 # 주문(매출) 수집 브랜드. 여러 개면 한 번에 받아 같은 탭에 쌓는다 (E열 브랜드로 구분).
-# 비워 두면 위 BRAND 하나만 받는다. 광고·손익은 BRAND 하나만 받는다.
+# 비워 두면 위 BRAND 하나만 받는다.
 # 예: ORDER_BRANDS = ["캠프살롱", "수면공감", "포즈업"]
 ORDER_BRANDS = ["캠프살롱", "포즈업"]
+
+# 광고 수집 브랜드. 여러 개면 '광고 RAW' 탭 '브랜드' 열(없으면 W열에 자동 생성)로 구분한다.
+# 비워 두면 BRAND 하나만 받는다. 브랜드 열이 비어 있는 기존 행은 BRAND 로 본다.
+AD_BRANDS = ["캠프살롱", "포즈업"]
+
+# 손익은 BRAND 하나만 받는다 (cigro 손익은 브랜드 합산 지표).
 
 # 주문 중 제품명(G열)에 이 글자가 들어간 행만 저장한다 (위치 무관). 비우면 전부 저장.
 ORDER_PRODUCT_KEYWORD = "[공구]"

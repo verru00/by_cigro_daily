@@ -295,11 +295,12 @@ async def download_excel(page, out_path: Path) -> Path | None:
         return None
 
 
-async def fetch_ads(days: list[str], out_dir: Path) -> dict[str, Path]:
-    """날짜별로 캠페인 엑셀을 받아 {날짜: 경로} 반환."""
+async def fetch_ads(days: list[str], out_dir: Path,
+                    brands: list[str] | None = None) -> dict[tuple[str, str], Path]:
+    """브랜드 × 날짜별로 캠페인 엑셀을 받아 {(브랜드, 날짜): 경로} 반환."""
     out_dir.mkdir(parents=True, exist_ok=True)
-    brand = C.ADS_BRAND
-    results: dict[str, Path] = {}
+    brands = brands if brands is not None else (C.ADS_BRANDS or [C.ADS_BRAND])
+    results: dict[tuple[str, str], Path] = {}
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=C.HEADLESS)
@@ -317,8 +318,10 @@ async def fetch_ads(days: list[str], out_dir: Path) -> dict[str, Path]:
             log(f"스크래퍼 버전: {SCRAPER_VERSION}")
             await login(page)
 
-            for i, day in enumerate(days, 1):
-                log(f"[{i}/{len(days)}] {day}  (브랜드: {brand or '전체'})")
+            jobs = [(b, d) for b in brands for d in days]
+            for i, (brand, day) in enumerate(jobs, 1):
+                tag = f"{brand}_{day}" if len(brands) > 1 else day
+                log(f"[{i}/{len(jobs)}] {day}  (브랜드: {brand or '전체'})")
                 url = build_url(day, brand)
                 log(f"  이동: {url}")
                 await _safe_goto(page, url, settle=3000)
@@ -341,8 +344,8 @@ async def fetch_ads(days: list[str], out_dir: Path) -> dict[str, Path]:
 
                 if not ready:
                     log(f"  광고 화면 판정 실패: {page.url}")
-                    await page.screenshot(path=str(out_dir / f"err_screen_{day}.png"))
-                    await probe(page, out_dir, f"99_notads_{day}")
+                    await page.screenshot(path=str(out_dir / f"err_screen_{tag}.png"))
+                    await probe(page, out_dir, f"99_notads_{tag}")
                     continue
 
                 # 브랜드는 계정 전역 설정이라 URL 파라미터만 믿으면 안 된다.
@@ -350,26 +353,26 @@ async def fetch_ads(days: list[str], out_dir: Path) -> dict[str, Path]:
                 # 코즈코즈였던 덕에 맞았을 뿐이다. 누가 시그로에서 바꾸면
                 # 광고도 조용히 전사를 받는다. 매출·손익과 같은 함수로 건다.
                 if brand and not await ensure_brand(page, brand):
-                    await page.screenshot(path=str(out_dir / f"err_brand_{day}.png"))
+                    await page.screenshot(path=str(out_dir / f"err_brand_{tag}.png"))
                     log("  -> 브랜드 확인 실패, 중단 (전사 데이터 유입 방지)")
                     return {}
 
                 if not await ensure_day(page, day):
-                    await page.screenshot(path=str(out_dir / f"err_date_{day}.png"))
+                    await page.screenshot(path=str(out_dir / f"err_date_{tag}.png"))
                     log("  -> 기간 설정 실패, 건너뜀 (잘못된 기간 수집 방지)")
                     continue
 
                 if C.ADS_PROBE:
-                    await probe(page, out_dir, f"ready_{day}")
+                    await probe(page, out_dir, f"ready_{tag}")
                     log("  [PROBE] 다운로드는 건너뜁니다.")
                     continue
 
-                path = await download_excel(page, out_dir / f"광고_캠페인_{day}")
+                path = await download_excel(page, out_dir / f"광고_캠페인_{tag}")
                 if path is None:
-                    await page.screenshot(path=str(out_dir / f"err_excel_{day}.png"))
-                    await probe(page, out_dir, f"98_noexcel_{day}")
+                    await page.screenshot(path=str(out_dir / f"err_excel_{tag}.png"))
+                    await probe(page, out_dir, f"98_noexcel_{tag}")
                     continue
-                results[day] = path
+                results[(brand, day)] = path
         finally:
             await context.close()
             await browser.close()

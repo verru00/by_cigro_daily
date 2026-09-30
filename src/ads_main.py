@@ -29,33 +29,37 @@ def main() -> int:
 
     log(f"실행: {run_day} ({weekday}) / 수집 날짜: {', '.join(days)}"
         + ("  [월요일 보정 - 이틀]" if len(days) > 1 else ""))
-    log(f"브랜드: {C.ADS_BRAND or '(전체)'} / 탭: {C.ADS_SHEET_TAB}")
+    brands = C.ADS_BRANDS or [C.ADS_BRAND]
+    multi = len(brands) > 1          # 여러 브랜드면 '브랜드' 열로 구분
+    log(f"브랜드: {', '.join(b or '(전체)' for b in brands)} / 탭: {C.ADS_SHEET_TAB}")
     log(f"DRY_RUN={C.DRY_RUN} / PROBE={C.ADS_PROBE} / "
         f"FILL_FORMULAS={C.ADS_FILL_FORMULAS}")
 
-    # ── 다운로드 (하루씩) ────────────────────────────────────────
-    files = asyncio.run(fetch_ads(days, out_dir))
+    # ── 다운로드 (브랜드 × 하루씩) ───────────────────────────────
+    files = asyncio.run(fetch_ads(days, out_dir, brands))
 
     if C.ADS_PROBE:
         log("[PROBE] 화면 덤프만 수행하고 종료합니다. artifact 를 확인하세요.")
         return 0
 
-    missing_days = [d for d in days if d not in files]
-    if missing_days:
+    jobs = [(b, d) for b in brands for d in days]
+    missing = [f"{b} {d}" if multi else d for b, d in jobs if (b, d) not in files]
+    if missing:
         # 일부만 반영하면 그 날짜 행이 통째로 비게 된다. 전부 성공해야 쓴다.
         notify(f"❌ cigro 광고 리프레시 실패\n"
-               f"다운로드 실패 날짜: {', '.join(missing_days)}\n"
+               f"다운로드 실패: {', '.join(missing)}\n"
                f"시트 미반영. artifact 의 스크린샷/probe 파일 확인")
-        log(f"다운로드 실패 -> 중단: {missing_days}")
+        log(f"다운로드 실패 -> 중단: {missing}")
         return 1
 
     # ── 수집 데이터 취합 ─────────────────────────────────────────
     frames = {}
-    for day in days:
-        df = read_table(files[day])
-        frames[day] = df
-        df.to_csv(out_dir / f"광고_{day}.csv", index=False, encoding="utf-8-sig")
-        log(f"[{day}] {len(df):,}행 × {len(df.columns)}열")
+    for b, day in jobs:
+        df = read_table(files[(b, day)])
+        frames[(b, day)] = df
+        name = f"광고_{b}_{day}.csv" if multi else f"광고_{day}.csv"
+        df.to_csv(out_dir / name, index=False, encoding="utf-8-sig")
+        log(f"[{b} {day}] {len(df):,}행 × {len(df.columns)}열")
 
     total = sum(len(d) for d in frames.values())
     if total == 0:
@@ -63,18 +67,25 @@ def main() -> int:
                f"날짜: {', '.join(days)}\n수집 0행 - 시트 미반영")
         return 1
 
+    first = frames[jobs[0]]
     if C.DRY_RUN:
-        cols = list(frames[days[0]].columns)
+        cols = list(first.columns)
         log(f"[DRY_RUN] 시트 미반영. 엑셀 열({len(cols)}개): {cols}")
         notify(f"🧪 cigro 광고 dry-run\n날짜: {', '.join(days)}\n"
-               + "\n".join(f"• {d}: {len(frames[d]):,}행" for d in days)
+               + "\n".join(f"• {b} {d}: {len(frames[(b, d)]):,}행" for b, d in jobs)
                + f"\n엑셀 열: {', '.join(str(c) for c in cols)}")
         return 0
 
     # ── 시트 병합 ────────────────────────────────────────────────
     gc = ads_sheets.client()
     ws = ads_sheets.worksheet(gc, C.ADS_SHEET_ID, C.ADS_SHEET_TAB)
-    header, existing = ads_sheets.read_existing(ws)
+    brand_col = ads_sheets.ensure_brand_col(ws, C.ADS_BRAND_HEADER) if multi else None
+    if multi:
+        header, existing, existing_brands = ads_sheets.read_existing(ws, brand_col)
+        log(f"브랜드 열: {ads_sheets.col_letter(brand_col)}열")
+    else:
+        header, existing = ads_sheets.read_existing(ws)
+        existing_brands = None
     prev = len(existing)
     log(f"기존 시트: {prev:,}행")
 
@@ -94,7 +105,7 @@ def main() -> int:
         log(f"A열 날짜 파싱 실패율 {bad:.0%} -> 중단. 예시={sample}")
         return 1
 
-    missing_cols = ads_sheets.check_columns(frames[days[0]], header)
+    missing_cols = ads_sheets.check_columns(first, header)
     if missing_cols:
         notify(f"❌ cigro 광고 리프레시 중단\n"
                f"엑셀에 없는 시트 열: {', '.join(missing_cols)}\n"
@@ -102,11 +113,19 @@ def main() -> int:
         log(f"열 불일치 -> 중단: {missing_cols}")
         return 1
 
-    new_rows = []
-    for day in days:
-        new_rows.extend(ads_sheets.to_rows(frames[day], header, day))
+    new_rows, new_brands = [], []
+    for b, day in jobs:
+        rows = ads_sheets.to_rows(frames[(b, day)], header, day)
+        new_rows.extend(rows)
+        new_brands.extend([b] * len(rows))
 
-    merged, kept = ads_sheets.merge(existing, new_rows, days)
+    if multi:
+        merged, merged_brands, kept = ads_sheets.merge_branded(
+            existing, existing_brands, new_rows, new_brands, days, brands,
+            legacy=C.ADS_LEGACY_BRAND)
+    else:
+        merged, kept = ads_sheets.merge(existing, new_rows, days)
+        merged_brands = None
     replaced = prev - kept
 
     # 급감 가드: 병합 결과가 기존보다 크게 줄면 쓰지 않는다
@@ -118,7 +137,9 @@ def main() -> int:
         return 1
 
     written = ads_sheets.write(ws, header, merged, prev,
-                               C.ADS_FILL_FORMULAS, existing=existing)
+                               C.ADS_FILL_FORMULAS, existing=existing,
+                               brand_col=brand_col, brands=merged_brands,
+                               existing_brands=existing_brands)
     log(f"기록 완료: 보존 {kept:,} + 신규 {len(new_rows):,} = {len(merged):,}행 "
         f"(실제 기록 {written:,}행)")
 
@@ -127,18 +148,19 @@ def main() -> int:
     if C.DRIVE_FOLDER_ID:
         try:
             svc = drive.service()
-            for day in days:
-                stem = f"{C.ADS_PREFIX}캠페인"
+            for b, day in jobs:
+                stem = f"{C.ADS_PREFIX}캠페인" + (f"_{b}" if multi else "")
                 stem += f"_{day}" if C.DRIVE_KEEP_HISTORY else ""
-                drive.upload(svc, C.DRIVE_FOLDER_ID, files[day],
-                             stem + files[day].suffix)
+                drive.upload(svc, C.DRIVE_FOLDER_ID, files[(b, day)],
+                             stem + files[(b, day)].suffix)
                 uploaded += 1
         except Exception as e:
             log(f"드라이브 업로드 실패: {e}")
 
     lines = ["✅ cigro 광고 캠페인 리프레시",
              f"날짜: {', '.join(days)}" + (" (월요일 보정)" if len(days) > 1 else "")]
-    lines += [f"• {d}: {len(frames[d]):,}행" for d in days]
+    lines += [f"• {b} {d}: {len(frames[(b, d)]):,}행" if multi else f"• {d}: {len(frames[(b, d)]):,}행"
+              for b, d in jobs]
     lines.append(f"시트[{C.ADS_SHEET_TAB}]: 보존 {kept:,} + 교체 {len(new_rows):,} "
                  f"= {len(merged):,}행 (직전 {prev:,}행, 제거 {replaced:,})")
     if uploaded:

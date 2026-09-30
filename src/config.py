@@ -141,7 +141,14 @@ ADS_FILL_FORMULAS = os.environ.get("ADS_FILL_FORMULAS", "false").lower() == "tru
 # ── 브랜드 ───────────────────────────────────────────────────────
 # '광고 RAW' 에는 브랜드 열이 없다 = 단일 브랜드 전용 시트.
 # 여러 브랜드를 한 탭에 넣으려면 시트에 브랜드 열을 먼저 만들어야 한다.
-ADS_BRAND = os.environ.get("CIGRO_AD_BRAND", "").strip() or DEFAULT_BRAND.strip()
+# 여러 브랜드면 쉼표 구분 (환경변수) 또는 brand_config.AD_BRANDS.
+_AD_DEFAULT = ",".join(getattr(_BC, "AD_BRANDS", []) or [DEFAULT_BRAND])
+ADS_BRANDS = [b.strip() for b in (os.environ.get("CIGRO_AD_BRAND", "").strip() or _AD_DEFAULT).split(",")
+              if b.strip()]
+ADS_BRAND = ADS_BRANDS[0] if ADS_BRANDS else ""
+# 브랜드 열이 비어 있는 기존 행을 어느 브랜드로 볼지 (단일 브랜드 시절 데이터)
+ADS_LEGACY_BRAND = DEFAULT_BRAND.strip()
+ADS_BRAND_HEADER = "브랜드"
 
 # ── 화면 진입 ────────────────────────────────────────────────────
 # 확인된 URL:
@@ -190,7 +197,7 @@ def validate_ads() -> None:
     if missing and not DRY_RUN:
         raise SystemExit(f"필수 환경변수 누락: {', '.join(missing)}")
     if not ADS_PROBE:
-        check_brand(ADS_BRAND, "광고")
+        check_brand(ADS_BRANDS, "광고")
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -218,7 +225,10 @@ PNL_TABS = {
     "순이익":   os.environ.get("PNL_TAB_NP", "순이익"),
 }
 
-PNL_BRAND = os.environ.get("CIGRO_PNL_BRAND", "").strip() or ADS_BRAND
+# 손익 브랜드: CIGRO_PNL_BRAND > (CIGRO_AD_BRAND 변수를 쓰면 그 첫 브랜드, 기존 동작) > BRAND
+PNL_BRAND = (os.environ.get("CIGRO_PNL_BRAND", "").strip()
+             or (ADS_BRAND if os.environ.get("CIGRO_AD_BRAND", "").strip() else "")
+             or DEFAULT_BRAND.strip())
 
 # 확인된 URL:
 #   https://app.cigro.io/?menu=analysis&tab=key_metrics
