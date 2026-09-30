@@ -10,4 +10,4 @@ GitHub Variables 의 CIGRO_BRANDS / CIGRO_AD_BRAND / CIGRO_PNL_BRAND 가 있으�
 비워 두면 cigro 가 '전체' 브랜드를 내려주므로 빈 값도 허용하지 않는다.
 """
 
-BRAND = "여기에_브랜드명"     # 예: 코즈코즈
+BRAND = "캠프살롱"     # 예: 코즈코즈
