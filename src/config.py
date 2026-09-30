@@ -57,8 +57,8 @@ DRIVE_KEEP_HISTORY = os.environ.get("DRIVE_KEEP_HISTORY", "false").lower() == "t
 DRIVE_PREFIX      = os.environ.get("DRIVE_PREFIX", "cigro_주문_")
 
 # ── 실행 옵션 ────────────────────────────────────────────────────
-DRY_RUN      = os.environ.get("DRY_RUN", "false").lower() == "true"
-FORCE_WRITE  = os.environ.get("FORCE_WRITE", "false").lower() == "true"  # 급감 가드 무시
+DRY_RUN      = os.environ.get("DRY_RUN", "false").strip().lower() == "true"
+FORCE_WRITE  = os.environ.get("FORCE_WRITE", "false").strip().lower() == "true"  # 급감 가드 무시
 HEADLESS     = os.environ.get("HEADLESS", "true").lower() == "true"
 CHAT_WEBHOOK = os.environ.get("GOOGLE_CHAT_WEBHOOK_URL", "")
 

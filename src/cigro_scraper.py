@@ -303,6 +303,23 @@ async def apply_date_range(page, start: str, end: str) -> bool:
     return True
 
 
+async def apply_date_range_retry(page, start: str, end: str, attempts: int = 3) -> bool:
+    """기간 설정을 최대 attempts 회 시도. 매번 맨 위로 스크롤하고 열린 달력을 닫는다."""
+    for n in range(1, attempts + 1):
+        try:
+            await page.keyboard.press("Escape")
+            await page.evaluate("window.scrollTo(0, 0)")
+            await page.wait_for_timeout(800)
+        except Exception:
+            pass
+        if await apply_date_range(page, start, end):
+            return True
+        if n < attempts:
+            log(f"  기간 설정 재시도 ({n + 1}/{attempts})")
+            await page.wait_for_timeout(2000)
+    return False
+
+
 async def download_excel(page, out_path: Path) -> bool:
     """검색어 없이 전체 결과 엑셀 다운로드."""
     # 검색창이 이전 값을 물고 있을 수 있으므로 비우고 재조회 (실패해도 진행)
@@ -351,12 +368,17 @@ async def fetch_all(brands: list[str], start: str, end: str, out_dir: Path) -> d
 
             for i, brand in enumerate(brands, 1):
                 log(f"[{i}/{len(brands)}] {brand}")
+                # 두 번째 브랜드부터는 앞 브랜드가 남긴 화면(스크롤·달력 상태)에서
+                # 기간 설정이 실패했다. 첫 브랜드와 같은 깨끗한 화면에서 시작한다.
+                if i > 1:
+                    await enter_order_screen(page, start, end)
+
                 if not await select_brand(page, brand):
                     await page.screenshot(path=str(out_dir / f"err_brand_{brand}.png"))
                     log(f"  -> 브랜드 선택 실패, 건너뜀")
                     continue
 
-                if not await apply_date_range(page, start, end):
+                if not await apply_date_range_retry(page, start, end):
                     await page.screenshot(path=str(out_dir / f"err_date_{brand}.png"))
                     log(f"  -> 기간 설정 실패, 건너뜀 (잘못된 기간 수집 방지)")
                     continue
