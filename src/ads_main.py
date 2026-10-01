@@ -53,9 +53,16 @@ def main() -> int:
         return 1
 
     # ── 수집 데이터 취합 ─────────────────────────────────────────
-    frames = {}
+    frames, dup_notes = {}, []
     for b, day in jobs:
-        df = read_table(files[(b, day)])
+        raw = read_table(files[(b, day)])
+        # cigro 엑셀에 모든 열이 같은 행이 두 번 들어오는 경우가 있다 (2026-09 포즈업 공동구매).
+        # 같은 날·같은 브랜드 안에서 완전히 같은 행은 하나만 남긴다.
+        df = raw.drop_duplicates().reset_index(drop=True)
+        dup = len(raw) - len(df)
+        if dup:
+            dup_notes.append(f"{b} {day} {dup}행")
+            log(f"  [{b} {day}] 완전 중복 {dup}행 제거")
         frames[(b, day)] = df
         name = f"광고_{b}_{day}.csv" if multi else f"광고_{day}.csv"
         df.to_csv(out_dir / name, index=False, encoding="utf-8-sig")
@@ -163,6 +170,8 @@ def main() -> int:
               for b, d in jobs]
     lines.append(f"시트[{C.ADS_SHEET_TAB}]: 보존 {kept:,} + 교체 {len(new_rows):,} "
                  f"= {len(merged):,}행 (직전 {prev:,}행, 제거 {replaced:,})")
+    if dup_notes:
+        lines.append(f"🔁 cigro 엑셀 중복 행 제거: {', '.join(dup_notes)}")
     if uploaded:
         lines.append(f"📁 드라이브 {uploaded}건 보관")
     notify("\n".join(lines))
