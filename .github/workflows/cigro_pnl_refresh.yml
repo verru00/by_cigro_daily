@@ -1,6 +1,12 @@
 name: cigro_pnl_daily_refresh
 
 on:
+  # 자동 실행 (GitHub 크론, UTC 기준). 실제 시작은 10~30분 늦을 수 있다.
+  # 광고 08:00 → 주문 08:20 → 손익 08:40 KST. 간격을 둬 cigro 브랜드 선택이 겹치지 않게 하고,
+  # 코즈코즈 저장소(09:10~)가 돌기 전에 끝낸다.
+  # Apps Script 트리거를 쓰면 이 schedule 블록을 지운다 (두 번 돈다).
+  schedule:
+    - cron: "40 23 * * *"  # 매일 08:40 KST (손익) — UTC 전날 23:40
   workflow_dispatch:
     inputs:
       dry_run:
