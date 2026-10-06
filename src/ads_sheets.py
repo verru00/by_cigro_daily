@@ -129,6 +129,21 @@ def check_columns(df, header: list) -> list[str]:
     return [str(h).strip() for h in header[1:] if str(h).strip() and str(h).strip() not in cols]
 
 
+def filter_campaign_keyword(df, keyword: str, header: str = "캠페인"):
+    """캠페인명에 keyword 가 들어간 행만 남긴다 (위치 무관). keyword 가 비면 그대로.
+
+    캠페인 열이 없으면 전부 저장되는 사고를 막기 위해 중단한다.
+    """
+    if not keyword:
+        return df
+    cols = {str(c).strip(): c for c in df.columns}
+    col = cols.get(header)
+    if col is None:
+        raise SystemExit(f"광고 엑셀에 '{header}' 열이 없어 '{keyword}' 필터를 적용할 수 없습니다")
+    keep = df[col].astype(str).str.contains(keyword, regex=False)
+    return df[keep].reset_index(drop=True)
+
+
 def to_rows(df, header: list, day: str) -> list[list]:
     """엑셀 DataFrame -> 시트 A~N 행. A(수집일자)는 day 로 채운다."""
     cols = {str(c).strip(): c for c in df.columns}

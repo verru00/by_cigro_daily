@@ -150,6 +150,12 @@ ADS_BRAND = ADS_BRANDS[0] if ADS_BRANDS else ""
 ADS_LEGACY_BRAND = DEFAULT_BRAND.strip()
 ADS_BRAND_HEADER = "브랜드"
 
+# 캠페인명에 이 글자가 들어간 광고만 저장 (비우면 전부). 환경변수로 덮어쓸 수 있다.
+_ad_kw_env = os.environ.get("AD_CAMPAIGN_KEYWORD")
+ADS_CAMPAIGN_KEYWORD = (_ad_kw_env if _ad_kw_env is not None
+                        else getattr(_BC, "AD_CAMPAIGN_KEYWORD", "")).strip()
+ADS_CAMPAIGN_HEADER = "캠페인"
+
 # ── 화면 진입 ────────────────────────────────────────────────────
 # 확인된 URL:
 #   https://app.cigro.io/?menu=analysis&tab=ad&group_by=campaign

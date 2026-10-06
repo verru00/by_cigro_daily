@@ -77,7 +77,9 @@ def parse_date(v) -> str:
     if v is None:
         return ""
     s = str(v).strip()
-    m = re.match(r"(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})", s)
+    # '2026. 9. 23' 처럼 점 뒤에 공백이 있는 한국어 날짜 표시도 읽는다.
+    # 못 읽으면 기존 행이 교체되지 않고 매 실행마다 같은 주문이 쌓인다 (2026-10 실제 발생).
+    m = re.match(r"(\d{4})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})", s)
     if m:
         return f"{int(m.group(1)):04d}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%Y/%m/%d %H:%M:%S", "%Y/%m/%d"):

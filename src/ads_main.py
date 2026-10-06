@@ -53,22 +53,32 @@ def main() -> int:
         return 1
 
     # ── 수집 데이터 취합 ─────────────────────────────────────────
-    frames, dup_notes = {}, []
+    kw = C.ADS_CAMPAIGN_KEYWORD
+    log(f"캠페인 필터: {kw + ' 포함' if kw else '(없음 — 전부 저장)'}")
+    frames, dup_notes, raw_total, dropped = {}, [], 0, 0
     for b, day in jobs:
         raw = read_table(files[(b, day)])
+        raw_total += len(raw)
         # cigro 엑셀에 모든 열이 같은 행이 두 번 들어오는 경우가 있다 (2026-09 포즈업 공동구매).
         # 같은 날·같은 브랜드 안에서 완전히 같은 행은 하나만 남긴다.
-        df = raw.drop_duplicates().reset_index(drop=True)
-        dup = len(raw) - len(df)
+        dedup = raw.drop_duplicates().reset_index(drop=True)
+        dup = len(raw) - len(dedup)
         if dup:
             dup_notes.append(f"{b} {day} {dup}행")
             log(f"  [{b} {day}] 완전 중복 {dup}행 제거")
+        df = ads_sheets.filter_campaign_keyword(dedup, kw, C.ADS_CAMPAIGN_HEADER)
+        dropped += len(dedup) - len(df)
         frames[(b, day)] = df
         name = f"광고_{b}_{day}.csv" if multi else f"광고_{day}.csv"
         df.to_csv(out_dir / name, index=False, encoding="utf-8-sig")
-        log(f"[{b} {day}] {len(df):,}행 × {len(df.columns)}열")
+        if kw:
+            log(f"[{b} {day}] {len(dedup):,}행 -> '{kw}' 포함 {len(df):,}행 저장")
+        else:
+            log(f"[{b} {day}] {len(df):,}행 × {len(df.columns)}열")
 
-    total = sum(len(d) for d in frames.values())
+    # 필터 후 0행은 정상일 수 있다 (그날 공구 광고가 없음). 그 날짜 행을 비우도록 그대로 진행한다.
+    # 다운로드 자체가 0행이면 화면 이상일 수 있으므로 멈춘다.
+    total = raw_total
     if total == 0:
         notify(f"⚠️ cigro 광고 리프레시 중단\n"
                f"날짜: {', '.join(days)}\n수집 0행 - 시트 미반영")
@@ -172,6 +182,8 @@ def main() -> int:
                  f"= {len(merged):,}행 (직전 {prev:,}행, 제거 {replaced:,})")
     if dup_notes:
         lines.append(f"🔁 cigro 엑셀 중복 행 제거: {', '.join(dup_notes)}")
+    if kw and dropped:
+        lines.append(f"🔎 '{kw}' 없는 캠페인 {dropped}행 제외")
     if uploaded:
         lines.append(f"📁 드라이브 {uploaded}건 보관")
     notify("\n".join(lines))
