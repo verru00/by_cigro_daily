@@ -36,7 +36,7 @@ def check_brand(value, label: str) -> None:
 
 # ── 구글 시트 ────────────────────────────────────────────────────
 SHEET_ID  = os.environ.get("CIGRO_SHEET_ID", "")
-SHEET_TAB = os.environ.get("SHEET_TAB", "씨그로 2개월_리프레시")
+SHEET_TAB = os.environ.get("SHEET_TAB", "공구 주문 RAW")
 
 # true 면 파이썬이 O~V 수식을 행마다 채운다.
 # false(기본) 면 O~V 를 건드리지 않는다 -> 시트 수식이 ARRAYFORMULA 여야 함.
