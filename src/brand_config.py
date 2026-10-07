@@ -28,3 +28,12 @@ AD_CAMPAIGN_KEYWORD = "[공구]"
 
 # 주문 중 제품명(G열)에 이 글자가 들어간 행만 저장한다 (위치 무관). 비우면 전부 저장.
 ORDER_PRODUCT_KEYWORD = "[공구]"
+# 위 ORDER_BRANDS·ORDER_PRODUCT_KEYWORD 는 '공구 주문 RAW' 탭(기본 탭) 설정이다.
+
+# 주문을 다른 탭에도 따로 수집할 때. 탭마다 브랜드·제품명 필터를 정한다.
+#  - tab:     시트 탭 이름 (기본 탭과 같은 헤더 A~X 여야 함 — 탭 복제 권장)
+#  - brands:  cigro 드롭다운 표기 그대로
+#  - keyword: 제품명에 이 글자가 들어간 주문만. "" 이면 전부 저장
+EXTRA_ORDER_TARGETS = [
+    {"tab": "B2B 주문 RAW", "brands": ["바이커머스"], "keyword": ""},
+]

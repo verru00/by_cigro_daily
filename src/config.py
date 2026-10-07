@@ -38,6 +38,24 @@ def check_brand(value, label: str) -> None:
 SHEET_ID  = os.environ.get("CIGRO_SHEET_ID", "")
 SHEET_TAB = os.environ.get("SHEET_TAB", "공구 주문 RAW")
 
+
+def _order_targets() -> list[dict]:
+    """주문 수집 대상 탭 목록. 첫 번째는 기본 탭(SHEET_TAB·BRANDS·ORDER_PRODUCT_KEYWORD),
+    나머지는 brand_config.EXTRA_ORDER_TARGETS. 탭마다 브랜드·제품명 필터가 따로다."""
+    targets = [{"tab": SHEET_TAB, "brands": BRANDS, "keyword": ORDER_PRODUCT_KEYWORD}]
+    for t in getattr(_BC, "EXTRA_ORDER_TARGETS", []) or []:
+        targets.append({
+            "tab": str(t.get("tab", "")).strip(),
+            "brands": [str(b).strip() for b in t.get("brands", []) if str(b).strip()],
+            "keyword": str(t.get("keyword", "") or "").strip(),
+        })
+    return targets
+
+
+ORDER_TARGETS = _order_targets()
+# 한 번 로그인해서 받을 전체 브랜드 (순서 유지, 중복 제거)
+ALL_ORDER_BRANDS = list(dict.fromkeys(b for t in ORDER_TARGETS for b in t["brands"]))
+
 # true 면 파이썬이 O~V 수식을 행마다 채운다.
 # false(기본) 면 O~V 를 건드리지 않는다 -> 시트 수식이 ARRAYFORMULA 여야 함.
 FILL_FORMULAS = os.environ.get("FILL_FORMULAS", "false").lower() == "true"
@@ -107,7 +125,10 @@ def validate() -> None:
     }.items() if not v]
     if missing and not DRY_RUN:
         raise SystemExit(f"필수 환경변수 누락: {', '.join(missing)}")
-    check_brand(BRANDS, "주문")
+    for t in ORDER_TARGETS:
+        if not t["tab"]:
+            raise SystemExit("EXTRA_ORDER_TARGETS 에 tab(탭 이름)이 비어 있는 항목이 있습니다")
+        check_brand(t["brands"], f"주문({t['tab']})")
 
 
 # ══════════════════════════════════════════════════════════════════
