@@ -57,7 +57,7 @@ jobs:
           CIGRO_EMAIL:                 ${{ secrets.CIGRO_EMAIL }}
           CIGRO_PASSWORD:              ${{ secrets.CIGRO_PASSWORD }}
           CIGRO_SHEET_ID:              ${{ secrets.CIGRO_SHEET_ID }}
-          SHEET_TAB:                   ${{ vars.SHEET_TAB || '광고 주문 RAW' }}
+          SHEET_TAB:                   ${{ vars.SHEET_TAB || '공구 주문 RAW' }}
           FILL_FORMULAS:               ${{ vars.FILL_FORMULAS || 'false' }}
           PURCHASE_CLASSIFY:           ${{ vars.PURCHASE_CLASSIFY || 'true' }}
           DRIVE_FOLDER_ID:             ${{ secrets.DRIVE_FOLDER_ID }}
