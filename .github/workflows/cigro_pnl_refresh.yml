@@ -1,12 +1,9 @@
 name: cigro_pnl_daily_refresh
 
 on:
-  # 자동 실행: GitHub 크론 (UTC 기준, 한국시간 = UTC+9).
-  # 광고 08:07 → 주문 08:27 → 손익 08:47 KST. 정각(:00)은 GitHub 실행이 몰려
-  # 1시간 넘게 밀리기도 해서 일부러 7분 단위로 비켜 둔다.
-  # 간격을 둬 cigro 브랜드 선택이 겹치지 않게 하고, 코즈코즈 저장소(09:10~)보다 먼저 끝낸다.
-  schedule:
-    - cron: "47 23 * * *"   # 매일 08:47 KST (손익)
+  # 실행 시각은 Apps Script 트리거(apps_script/cigro_trigger.gs)가 정한다:
+  # 광고 08:00 · 주문 08:20 · 손익 08:40 KST (±15분).
+  # GitHub 크론(schedule)은 2~3시간씩 밀려서 쓰지 않는다. 다시 넣으면 두 번 돈다.
   workflow_dispatch:
     inputs:
       dry_run:
