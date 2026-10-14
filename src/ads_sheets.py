@@ -144,6 +144,22 @@ def filter_campaign_keyword(df, keyword: str, header: str = "캠페인"):
     return df[keep].reset_index(drop=True)
 
 
+def filter_channels(df, channels: list, header: str = "광고채널"):
+    """광고채널이 channels 에 있는 행만 남긴다 (대소문자·앞뒤 공백 무시). 목록이 비면 그대로.
+
+    광고채널 열이 없으면 전부 저장되는 사고를 막기 위해 중단한다.
+    """
+    if not channels:
+        return df
+    cols = {str(c).strip(): c for c in df.columns}
+    col = cols.get(header)
+    if col is None:
+        raise SystemExit(f"광고 엑셀에 '{header}' 열이 없어 채널 필터를 적용할 수 없습니다")
+    wanted = {str(c).strip().upper() for c in channels}
+    keep = df[col].astype(str).str.strip().str.upper().isin(wanted)
+    return df[keep].reset_index(drop=True)
+
+
 def to_rows(df, header: list, day: str) -> list[list]:
     """엑셀 DataFrame -> 시트 A~N 행. A(수집일자)는 day 로 채운다."""
     cols = {str(c).strip(): c for c in df.columns}

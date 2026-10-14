@@ -54,8 +54,10 @@ def main() -> int:
 
     # ── 수집 데이터 취합 ─────────────────────────────────────────
     kw = C.ADS_CAMPAIGN_KEYWORD
+    chans = C.ADS_CHANNELS
     log(f"캠페인 필터: {kw + ' 포함' if kw else '(없음 — 전부 저장)'}")
-    frames, dup_notes, raw_total, dropped = {}, [], 0, 0
+    log(f"광고채널 필터: {', '.join(chans) if chans else '(없음 — 전부 저장)'}")
+    frames, dup_notes, raw_total, dropped, ch_dropped = {}, [], 0, 0, 0
     for b, day in jobs:
         raw = read_table(files[(b, day)])
         raw_total += len(raw)
@@ -66,13 +68,15 @@ def main() -> int:
         if dup:
             dup_notes.append(f"{b} {day} {dup}행")
             log(f"  [{b} {day}] 완전 중복 {dup}행 제거")
-        df = ads_sheets.filter_campaign_keyword(dedup, kw, C.ADS_CAMPAIGN_HEADER)
-        dropped += len(dedup) - len(df)
+        by_kw = ads_sheets.filter_campaign_keyword(dedup, kw, C.ADS_CAMPAIGN_HEADER)
+        df = ads_sheets.filter_channels(by_kw, chans, C.ADS_CHANNEL_HEADER)
+        dropped += len(dedup) - len(by_kw)
+        ch_dropped += len(by_kw) - len(df)
         frames[(b, day)] = df
         name = f"광고_{b}_{day}.csv" if multi else f"광고_{day}.csv"
         df.to_csv(out_dir / name, index=False, encoding="utf-8-sig")
-        if kw:
-            log(f"[{b} {day}] {len(dedup):,}행 -> '{kw}' 포함 {len(df):,}행 저장")
+        if kw or chans:
+            log(f"[{b} {day}] {len(dedup):,}행 -> 필터 후 {len(df):,}행 저장")
         else:
             log(f"[{b} {day}] {len(df):,}행 × {len(df.columns)}열")
 
@@ -184,6 +188,8 @@ def main() -> int:
         lines.append(f"🔁 cigro 엑셀 중복 행 제거: {', '.join(dup_notes)}")
     if kw and dropped:
         lines.append(f"🔎 '{kw}' 없는 캠페인 {dropped}행 제외")
+    if chans and ch_dropped:
+        lines.append(f"🔎 {', '.join(chans)} 외 광고채널 {ch_dropped}행 제외")
     if uploaded:
         lines.append(f"📁 드라이브 {uploaded}건 보관")
     notify("\n".join(lines))

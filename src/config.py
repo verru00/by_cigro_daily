@@ -177,6 +177,14 @@ ADS_CAMPAIGN_KEYWORD = (_ad_kw_env if _ad_kw_env is not None
                         else getattr(_BC, "AD_CAMPAIGN_KEYWORD", "")).strip()
 ADS_CAMPAIGN_HEADER = "캠페인"
 
+# 이 광고채널만 저장 (비우면 전부). 환경변수 AD_CHANNELS(쉼표 구분)로 덮어쓸 수 있다.
+_ad_ch_env = os.environ.get("AD_CHANNELS")
+ADS_CHANNELS = [c.strip() for c in
+                (_ad_ch_env.split(",") if _ad_ch_env is not None
+                 else getattr(_BC, "AD_CHANNELS", []) or [])
+                if str(c).strip()]
+ADS_CHANNEL_HEADER = "광고채널"
+
 # ── 화면 진입 ────────────────────────────────────────────────────
 # 확인된 URL:
 #   https://app.cigro.io/?menu=analysis&tab=ad&group_by=campaign
